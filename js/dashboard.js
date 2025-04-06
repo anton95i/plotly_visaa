@@ -3,6 +3,10 @@
 // We'll store the raw CSV rows here so we can re-filter without parsing again
 let rawData = [];
 
+let earliestDateObj = null;
+let latestDateObj = null;
+let totalDays = 0;
+
 // Parse CSV and initialize everything
 Papa.parse('data/data.csv', {
 	download: true,
@@ -11,13 +15,59 @@ Papa.parse('data/data.csv', {
 		rawData = results.data;
 
 		// Filter out any empty rows
-		rawData = rawData.filter(row => row.region && row.product && row.device_created_day);
+		rawData = rawData.filter(row => {
+			const dateObj = new Date(parseDateDDMMYYYY(row.device_created_day));
+			return row.region && row.product && row.device_created_day && dateObj > new Date('2021-10-01');
+		});
+
+		// Convert "device_created_day" to date objects and find min/max dates
+		rawData.forEach(row => {
+			const dateStr = parseDateDDMMYYYY(row.device_created_day);
+			if (!dateStr) return;
+			const dateObj = new Date(dateStr);
+
+			if (!earliestDateObj || dateObj < earliestDateObj) earliestDateObj = dateObj;
+			if (!latestDateObj || dateObj > latestDateObj) latestDateObj = dateObj;
+		});
+
+		if (!earliestDateObj || !latestDateObj) {
+			console.error('No valid dates found in data.');
+			return;
+		}
+
+		totalDays = dayDifference(new Date(earliestDateObj), new Date(latestDateObj));
+
+		rawData.forEach(row => {
+			const dateStr = parseDateDDMMYYYY(row.device_created_day);
+			if (dateStr) {
+				row.offsetDays = dayDifference(new Date(earliestDateObj), new Date(dateStr));
+			} else {
+				row.offsetDays = null;
+			}
+		});
 
 		// Populate dropdown with unique "region" values
 		populateRegionDropdown(rawData);
 
+		// Initialize date slider
+		initDateSlider();
+
 		// Render initial charts with "no filter" (regionSelect.value = "")
 		renderAllCharts();
+
+		// Set up event listener for the reset button
+		const resetButton = document.getElementById('resetFilters');
+		resetButton.addEventListener('click', () => {
+			console.log('Reset button clicked');
+			const regionSelect = document.getElementById('regionSelect');
+			regionSelect.value = '';
+
+			$("#dateSlider").slider("values", [0, totalDays]);
+			updateDateRangeLabel(0, totalDays);
+			toggleFilterMap.checked = false;
+
+			renderAllCharts();
+		});
 	}
 });
 
@@ -33,6 +83,64 @@ const regionView = {
 	'Vorarlberg':       { center: { lat: 47.2478,  lon: 9.9016 },   zoom: 6.5 },
 	'Burgenland':       { center: { lat: 47.5167,  lon: 16.3667 },  zoom: 6 }
 };
+
+// ---------------
+const citicenPerRegion = {
+	'Wien': 2000000,
+	'Niederösterreich': 1730000,
+	'Oberösterreich': 1530000,
+	'Salzburg': 570000,
+	'Steiermark': 1200000,
+	'Kärnten': 580000,
+	'Tirol': 780000,
+	'Vorarlberg': 410000,
+	'Burgenland': 300000
+};
+
+// --------------
+// The jQuery UI range slider
+function initDateSlider() {
+	// Start with full range [0, totalDays]
+	$("#dateSlider").slider({
+		range: true,
+		min: 0,
+		max: totalDays,
+		values: [0, totalDays], // left handle=0, right handle=totalDays
+		slide: function(event, ui) {
+			// called on every handle move
+			updateDateRangeLabel(ui.values[0], ui.values[1]);
+			renderAllCharts(); // re-filter on slide
+		}
+	});
+
+	// Show initial label
+	updateDateRangeLabel(0, totalDays);
+
+	toggleFilterMap.addEventListener('change', () => {
+		renderAllCharts();
+	});
+}
+
+// This updates the #dateRangeLabel text
+function updateDateRangeLabel(offsetStart, offsetEnd) {
+	const startDate = addDays(earliestDateObj, offsetStart);
+	const endDate = addDays(earliestDateObj, offsetEnd);
+
+	const startStr = startDate.toISOString().split('T')[0].slice(0, 7);
+	const endStr = endDate.toISOString().split('T')[0].slice(0, 7);
+
+	// $("#dateRangeLabel").text(`Range: ${startStr} - ${endStr}`);
+	/*
+			<div class="flex-filter">
+			<div id="dateRangeLabelStart" style="margin-bottom: 20px;">Start Date:</div>
+			<div id="dateSlider" style="width:300px; margin: 20px 0;"></div>
+			<!-- <div id="dateRangeLabel" style="margin-bottom: 20px;">Range: ? - ?</div> -->
+			<div id="dateRangeLabelEnd" style="margin-bottom: 20px;">End Date:</div>
+		</div>
+	*/
+	$("#dateRangeLabelStart").text(`Filter by Date: ${startStr}`);
+	$("#dateRangeLabelEnd").text(`${endStr}`);
+}
   
 // ---------------
 // Populate region dropdown
@@ -56,7 +164,7 @@ function populateRegionDropdown(rows) {
 
 	// Listen for changes
 	regionSelect.addEventListener('change', () => {
-		renderAllCharts(); // Re-render all charts
+		renderAllCharts();
 	});
 }
 
@@ -66,11 +174,20 @@ function renderAllCharts() {
 	// Check current region filter
 	const regionFilter = document.getElementById('regionSelect').value;
 
+	// Get slider positions
+	const sliderValues = $("#dateSlider").slider("values"); 
+	const offsetMin = sliderValues[0];
+	const offsetMax = sliderValues[1];
+
 	// Filter data
-	let filtered = rawData;
-	if (regionFilter) {
-		filtered = rawData.filter(row => row.region === regionFilter);
-	}
+	const filtered = rawData.filter(row => {
+		if (regionFilter && row.region !== regionFilter) return false;
+
+		if (row.offsetDays === null) return false;
+		if (row.offsetDays < offsetMin || row.offsetDays > offsetMax) return false;
+
+		return true;
+	});
 
 	// Render each chart
 	renderLineChart(filtered);
@@ -87,6 +204,9 @@ function renderMapChart(data) {
 	fetch('data/oesterreich.json')
 		.then(resp => resp.json())
 		.then(geoData => {
+			const regionFilter = document.getElementById('regionSelect').value;
+			const isRelative = document.getElementById('toggleFilterMap').checked;
+
 			// Aggregate CSV by region -> count
 			const regionCounts = new Map();
 			data.forEach(row => {
@@ -101,6 +221,11 @@ function renderMapChart(data) {
 			const zValues = [];
 			regionCounts.forEach((count, regionName) => {
 				locations.push(regionName);
+				if (isRelative) {
+					const total = citicenPerRegion[regionName] || 1;
+					zValues.push(count / total * 100);
+					return;
+				}
 				zValues.push(count);
 			});
 
@@ -116,11 +241,12 @@ function renderMapChart(data) {
 				zmin: 0,
 				zmax: maxCount,
 				marker: { line: { width: 1, color: 'gray' }},
-				hovertemplate: '%{location}<br>Count: %{z}<extra></extra>'
+				hovertemplate: isRelative
+					? '%{location}<br>%{z:.2f}%<extra></extra>'
+					: '%{location}<br>Count: %{z}<extra></extra>',
 			};
 
 			// Decide on center/zoom
-			const regionFilter = document.getElementById('regionSelect').value;
 			let mapCenter = { lat: 47.7, lon: 13.3 };
 			let mapZoom = 5.2;
 	
@@ -144,7 +270,26 @@ function renderMapChart(data) {
 
 			const config = { responsive: true };
 
-			Plotly.newPlot('chart-map', [trace], layout);
+			Plotly.newPlot('chart-map', [trace], layout, config)
+				.then((gd) => {
+					gd.on('plotly_click', function(eventData) {
+						if (eventData && eventData.points && eventData.points.length > 0) {
+							const clickedRegion = eventData.points[0].location;
+				
+							const regionSelect = document.getElementById('regionSelect');
+							regionSelect.value = clickedRegion;
+				
+							renderAllCharts();
+						}
+					});
+
+					gd.on('plotly_doubleclick', function(eventData) {
+						const regionSelect = document.getElementById('regionSelect');
+						regionSelect.value = '';
+						renderAllCharts();
+					});
+				}
+			);
 		})
 		.catch(err => console.error('Failed to load GeoJSON:', err));
 }
@@ -251,4 +396,17 @@ function parseDateDDMMYYYY(dateStr) {
 	const dateObj = new Date(year, parseInt(month, 10) - 1, parseInt(day, 10));
 	// Return ISO-like string "YYYY-MM-DD"
 	return dateObj.toISOString().split('T')[0];
+}
+
+// dayDifference(d1, d2): how many days from d1 to d2 (integer)
+function dayDifference(d1, d2) {
+	const msPerDay = 24 * 60 * 60 * 1000;
+	return Math.floor((d2 - d1) / msPerDay);
+}
+
+// addDays(dateObj, n): returns new Date object = dateObj + n days
+function addDays(baseDate, daysToAdd) {
+	const newDate = new Date(baseDate.getTime());
+	newDate.setDate(newDate.getDate() + daysToAdd);
+	return newDate;
 }
