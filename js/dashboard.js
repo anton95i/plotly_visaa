@@ -121,8 +121,8 @@ function renderMapChart(data) {
 
 			// Decide on center/zoom
 			const regionFilter = document.getElementById('regionSelect').value;
-			let mapCenter = { lat: 47.7, lon: 13.3 }; // default center
-			let mapZoom = 5.2;                       // default zoom
+			let mapCenter = { lat: 47.7, lon: 13.3 };
+			let mapZoom = 5.2;
 	
 			if (regionFilter && regionView[regionFilter]) {
 				mapCenter = regionView[regionFilter].center;
@@ -130,20 +130,14 @@ function renderMapChart(data) {
 			}
 
 			const viewWidth = window.innerWidth;
-			console.log('View Width:', viewWidth);
-			console.log('defaultzoom:', (mapZoom / 2) + (mapZoom / 2) * viewWidth / 1500);
-			const zoomToApply = (mapZoom / 4 * 2.5) + (mapZoom / 4 * 1.5) * viewWidth / 1500;
+			const zoomToApply = (mapZoom / 4 * 3) + (mapZoom / 4 * 1) * viewWidth / 1500;
 
 			const layout = {
 				title: 'Devices by Region',
 				mapbox: {
 					style: 'open-street-map',
-					// center: { lat: 47.7, lon: 13.3 },
 					center: mapCenter,
-					// zoom: 5.5,
 					zoom: zoomToApply,
-					// multiple zoom levels regrding of the viewwidth
-
 				},
 				margin: { t: 40, b: 0 }
 			};
