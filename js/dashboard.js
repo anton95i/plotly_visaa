@@ -22,19 +22,18 @@ Papa.parse('data/data.csv', {
 });
 
 // -------------
-// A dictionary of Austrian regions -> lat/lon
-const regionCoordinates = {
-	'Wien': { lat: 48.210033, lon: 16.363449 },
-	'Niederösterreich': { lat: 48.1186, lon: 15.8040 },
-	'Oberösterreich': { lat: 48.0000, lon: 13.9720 },
-	'Salzburg': { lat: 47.8095, lon: 13.0550 },
-	'Steiermark': { lat: 47.3593, lon: 15.2890 },
-	'Kärnten': { lat: 46.636,  lon: 14.3122 },
-	'Tirol': { lat: 47.2682,  lon: 11.4041 },
-	'Vorarlberg': { lat: 47.2478, lon: 9.6016 },
-	'Burgenland': { lat: 47.2167, lon: 16.3667 }
+const regionView = {
+	'Wien':           { center: { lat: 48.210033, lon: 16.363449 }, zoom: 8 },
+	'Niederösterreich': { center: { lat: 48.2186,  lon: 15.8040 },  zoom: 5.9 },
+	'Oberösterreich':   { center: { lat: 48.1000,  lon: 13.9720 },  zoom: 6 },
+	'Salzburg':         { center: { lat: 47.5095,  lon: 13.0550 },  zoom: 6 },
+	'Steiermark':       { center: { lat: 47.2593,  lon: 15.0890 },  zoom: 6 },
+	'Kärnten':          { center: { lat: 46.836,   lon: 13.8122 },  zoom: 6 },
+	'Tirol':            { center: { lat: 47.2682,  lon: 11.4041 },  zoom: 6 },
+	'Vorarlberg':       { center: { lat: 47.2478,  lon: 9.9016 },   zoom: 6.5 },
+	'Burgenland':       { center: { lat: 47.5167,  lon: 16.3667 },  zoom: 6 }
 };
-
+  
 // ---------------
 // Populate region dropdown
 function populateRegionDropdown(rows) {
@@ -42,6 +41,7 @@ function populateRegionDropdown(rows) {
 	rows.forEach(row => {
 		if (row.region) regionSet.add(row.region);
 	});
+
 	const regionSelect = document.getElementById('regionSelect');
 	
 	// Sort them alphabetically (or not)
@@ -79,63 +79,81 @@ function renderAllCharts() {
 	renderMapChart(filtered);
 }
 
-// -------------
-// Chart 4: Map with region markers
+// ---------------
+// Choropleth map for Austria
 function renderMapChart(data) {
-	// Group by region -> count
-	const regionCounts = new Map();
-	data.forEach(row => {
-		const reg = row.region;
-		if (!reg) return;
-		const cur = regionCounts.get(reg) || 0;
-		regionCounts.set(reg, cur + 1);
-	});
+	// We'll fetch the geojson every time or just once. Let's do it once for simplicity.
+	// Option A: fetch each time. Option B: store in a global variable. 
+	fetch('data/oesterreich.json')
+		.then(resp => resp.json())
+		.then(geoData => {
+			// Aggregate CSV by region -> count
+			const regionCounts = new Map();
+			data.forEach(row => {
+				const reg = row.region;
+				if (!reg) return;
+				const oldVal = regionCounts.get(reg) || 0;
+				regionCounts.set(reg, oldVal + 1);
+			});
 
-	// Build arrays for Plotly (lat, lon, text)
-	const latArr = [];
-	const lonArr = [];
-	const textArr = [];
-	const sizeArr = [];
+			// Build arrays for Plotly
+			const locations = [];
+			const zValues = [];
+			regionCounts.forEach((count, regionName) => {
+				locations.push(regionName);
+				zValues.push(count);
+			});
 
-	regionCounts.forEach((count, reg) => {
-		// does this region have lat/lon in our dictionary?
-		if (regionCoordinates[reg]) {
-			latArr.push(regionCoordinates[reg].lat);
-			lonArr.push(regionCoordinates[reg].lon);
-			textArr.push(`${reg}: ${count}`);
-			// marker size scaled by count, for example
-			sizeArr.push(Math.max(count * 3, 10)); // min size = 10
-		}
-	});
+			const maxCount = zValues.length ? Math.max(...zValues) : 0;
 
-	// Plot a scattermapbox
-	const trace = {
-		type: 'scattermapbox',
-		lat: latArr,
-		lon: lonArr,
-		mode: 'markers',
-		marker: {
-			size: sizeArr
-		},
-		text: textArr,
-		hoverinfo: 'text'
-	};
+			const trace = {
+				type: 'choroplethmapbox',
+				geojson: geoData,
+				locations: locations,
+				z: zValues,
+				featureidkey: 'properties.name',
+				colorscale: [[0, 'lightblue'], [1, 'blue']],
+				zmin: 0,
+				zmax: maxCount,
+				marker: { line: { width: 1, color: 'gray' }},
+				hovertemplate: '%{location}<br>Count: %{z}<extra></extra>'
+			};
 
-	const layout = {
-		title: 'Devices by Region',
-		mapbox: {
-			style: 'open-street-map',       // no access token required
-			center: { lat: 47.5, lon: 14 }, // approximate center of Austria
-			zoom: 4
-		},
-		margin: { t: 40, b: 0 }
-	};
+			// Decide on center/zoom
+			const regionFilter = document.getElementById('regionSelect').value;
+			let mapCenter = { lat: 47.7, lon: 13.3 }; // default center
+			let mapZoom = 5.2;                       // default zoom
+	
+			if (regionFilter && regionView[regionFilter]) {
+				mapCenter = regionView[regionFilter].center;
+				mapZoom = regionView[regionFilter].zoom;
+			}
 
-	// If you see a blank map, try removing style:'open-street-map'
-	// or specify a Mapbox access token if needed.
-	Plotly.newPlot('chart-map', [trace], layout);
+			const viewWidth = window.innerWidth;
+			console.log('View Width:', viewWidth);
+			console.log('defaultzoom:', (mapZoom / 2) + (mapZoom / 2) * viewWidth / 1500);
+			const zoomToApply = (mapZoom / 4 * 2.5) + (mapZoom / 4 * 1.5) * viewWidth / 1500;
+
+			const layout = {
+				title: 'Devices by Region',
+				mapbox: {
+					style: 'open-street-map',
+					// center: { lat: 47.7, lon: 13.3 },
+					center: mapCenter,
+					// zoom: 5.5,
+					zoom: zoomToApply,
+					// multiple zoom levels regrding of the viewwidth
+
+				},
+				margin: { t: 40, b: 0 }
+			};
+
+			const config = { responsive: true };
+
+			Plotly.newPlot('chart-map', [trace], layout);
+		})
+		.catch(err => console.error('Failed to load GeoJSON:', err));
 }
-  
 
 // ---------------
 // Line chart over time
