@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Plotly.js Dashboard - Streamingdata - wi24m037 Steiner Anton</title>
+	<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+	<link rel="stylesheet" href="styles.css" />
+
+	<link rel="stylesheet" href="https://code.jquery.com/ui/1.13.2/themes/smoothness/jquery-ui.css">
+	<script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+	<script src="https://code.jquery.com/ui/1.13.2/jquery-ui.min.js"></script>
+</head>
+<body>
+	<h2>Plotly.js Dashboard - Streamingdata - wi24m037 Steiner Anton</h2>
+
+	<div id="filters">
+		<div class="flex-filter">
+			<label for="regionSelect">Filter by Region:</label>
+			<select id="regionSelect">
+				<option value="">(All)</option>
+				<!-- Options will be populated dynamically -->
+			</select>
+		</div>
+
+		<div class="flex-filter">
+			<label for="deviceTypeSelect">Filter by devicetype:</label>
+			<select id="deviceTypeSelect">
+				<option value="">(All)</option>
+				<!-- Options will be populated dynamically -->
+			</select>
+		</div>
+
+		<div class="flex-filter">
+			<div id="dateRangeLabelStart">Start Date:</div>
+			<div id="dateSlider" class="date-slider"></div>
+			<div id="dateRangeLabelEnd">End Date:</div>
+		</div>
+
+		<div class="simple-button">
+			<button id="resetFilters">Reset Filters</button>
+		</div>
+	</div>
+
+	<!-- Chart containers -->
+	<div id="dashboard-container">
+		<div class="chart-wrapper">
+			<div id="chart-map" class="chart-with-filter-below"></div>
+			<div id="toggle-filter-map" class="filter-inside-chart">
+				<label for="toggle-filter-map">Relative:</label>
+				<input type="checkbox" id="toggleFilterMap" />
+			</div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-line" class="chart"></div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-bar" class="chart"></div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-pie" class="chart"></div>
+		</div>
+	</div>
+
+	<div id="chart"></div>
+
+	<script src="js/dashboard.js"></script>
+</body>
+</html>
