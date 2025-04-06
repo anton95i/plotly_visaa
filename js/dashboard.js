@@ -46,8 +46,9 @@ Papa.parse('data/data.csv', {
 			}
 		});
 
-		// Populate dropdown with unique "region" values
+		// Populate dropdown with unique "region" and "deviceType" values
 		populateRegionDropdown(rawData);
+		populateDeviceTypeDropdown(rawData);
 
 		// Initialize date slider
 		initDateSlider();
@@ -61,6 +62,9 @@ Papa.parse('data/data.csv', {
 			console.log('Reset button clicked');
 			const regionSelect = document.getElementById('regionSelect');
 			regionSelect.value = '';
+
+			const deviceTypeSelect = document.getElementById('deviceTypeSelect');
+			deviceTypeSelect.value = '';
 
 			$("#dateSlider").slider("values", [0, totalDays]);
 			updateDateRangeLabel(0, totalDays);
@@ -97,6 +101,19 @@ const citicenPerRegion = {
 	'Burgenland': 300000
 };
 
+// ---------------
+const colorsPerDeviceTypeOrProduct = {
+	"Mobile": "#1f77b4",
+	"Mediabox": "#ff7f0e",
+	"Tablet": "#2ca02c",
+	"Smart TV": "#d62728",
+	"Web": "#9467bd",
+	"S": "#8c564b",
+	"M": "#e377c2",
+	"L": "#7f7f7f",
+	"Premium": "#bcbd22"
+};
+
 // --------------
 // The jQuery UI range slider
 function initDateSlider() {
@@ -129,15 +146,6 @@ function updateDateRangeLabel(offsetStart, offsetEnd) {
 	const startStr = startDate.toISOString().split('T')[0].slice(0, 7);
 	const endStr = endDate.toISOString().split('T')[0].slice(0, 7);
 
-	// $("#dateRangeLabel").text(`Range: ${startStr} - ${endStr}`);
-	/*
-			<div class="flex-filter">
-			<div id="dateRangeLabelStart" style="margin-bottom: 20px;">Start Date:</div>
-			<div id="dateSlider" style="width:300px; margin: 20px 0;"></div>
-			<!-- <div id="dateRangeLabel" style="margin-bottom: 20px;">Range: ? - ?</div> -->
-			<div id="dateRangeLabelEnd" style="margin-bottom: 20px;">End Date:</div>
-		</div>
-	*/
 	$("#dateRangeLabelStart").text(`Filter by Date: ${startStr}`);
 	$("#dateRangeLabelEnd").text(`${endStr}`);
 }
@@ -169,10 +177,39 @@ function populateRegionDropdown(rows) {
 }
 
 // ---------------
+// Populate device type dropdown
+function populateDeviceTypeDropdown(rows) {
+	const deviceTypeSet = new Set();
+	rows.forEach(row => {
+		if (row.device_type_category) deviceTypeSet.add(row.device_type_category);
+	});
+
+	const deviceTypeSelect = document.getElementById('deviceTypeSelect');
+	
+	// Sort them alphabetically (or not)
+	const sortedDeviceTypes = Array.from(deviceTypeSet).sort();
+
+	sortedDeviceTypes.forEach(deviceTypeValue => {
+		const opt = document.createElement('option');
+		opt.value = deviceTypeValue;
+		opt.textContent = deviceTypeValue;
+		deviceTypeSelect.appendChild(opt);
+	});
+
+	// Listen for changes
+	deviceTypeSelect.addEventListener('change', () => {
+		renderAllCharts();
+	});
+}
+
+// ---------------
 // Render all charts (line, bar, pie)
 function renderAllCharts() {
 	// Check current region filter
 	const regionFilter = document.getElementById('regionSelect').value;
+
+	// Check current device type filter
+	const deviceTypeFilter = document.getElementById('deviceTypeSelect').value;
 
 	// Get slider positions
 	const sliderValues = $("#dateSlider").slider("values"); 
@@ -182,6 +219,7 @@ function renderAllCharts() {
 	// Filter data
 	const filtered = rawData.filter(row => {
 		if (regionFilter && row.region !== regionFilter) return false;
+		if (deviceTypeFilter && row.device_type_category !== deviceTypeFilter) return false;
 
 		if (row.offsetDays === null) return false;
 		if (row.offsetDays < offsetMin || row.offsetDays > offsetMax) return false;
@@ -205,6 +243,7 @@ function renderMapChart(data) {
 		.then(resp => resp.json())
 		.then(geoData => {
 			const regionFilter = document.getElementById('regionSelect').value;
+			const deviceTypeFilter = document.getElementById('deviceTypeSelect').value;
 			const isRelative = document.getElementById('toggleFilterMap').checked;
 
 			// Aggregate CSV by region -> count
@@ -212,6 +251,8 @@ function renderMapChart(data) {
 			data.forEach(row => {
 				const reg = row.region;
 				if (!reg) return;
+				if (regionFilter && reg !== regionFilter) return;
+				if (deviceTypeFilter && row.device_type_category !== deviceTypeFilter) return;
 				const oldVal = regionCounts.get(reg) || 0;
 				regionCounts.set(reg, oldVal + 1);
 			});
@@ -237,7 +278,7 @@ function renderMapChart(data) {
 				locations: locations,
 				z: zValues,
 				featureidkey: 'properties.name',
-				colorscale: [[0, 'lightblue'], [1, 'blue']],
+				colorscale: [[0, '#ffcc99'], [1, '#663300']],
 				zmin: 0,
 				zmax: maxCount,
 				marker: { line: { width: 1, color: 'gray' }},
@@ -346,7 +387,10 @@ function renderBarChart(data) {
 	const trace = {
 		x: categories,
 		y: counts,
-		type: 'bar'
+		type: 'bar',
+		marker: {
+			color: categories.map(c => colorsPerDeviceTypeOrProduct[c] || '#ccc')
+		}
 	};
 
 	const layout = {
@@ -355,7 +399,24 @@ function renderBarChart(data) {
 		yaxis: { title: 'Count' }
 	};
 
-	Plotly.newPlot('chart-bar', [trace], layout);
+	Plotly.newPlot('chart-bar', [trace], layout)
+		.then(() => {
+			const barChart = document.getElementById('chart-bar');
+			barChart.on('plotly_click', function(eventData) {
+				if (eventData && eventData.points && eventData.points.length > 0) {
+					const clickedCategory = eventData.points[0].x;
+					const deviceTypeSelect = document.getElementById('deviceTypeSelect');
+					deviceTypeSelect.value = clickedCategory;
+					renderAllCharts();
+				}
+			});
+
+			barChart.on('plotly_doubleclick', function(eventData) {
+				const deviceTypeSelect = document.getElementById('deviceTypeSelect');
+				deviceTypeSelect.value = '';
+				renderAllCharts();
+			});
+		});
 }
 
 // ---------------
@@ -370,16 +431,20 @@ function renderPieChart(data) {
 	});
 
 	const labels = Array.from(productCounts.keys());
+	console.log('Labels:', labels);
 	const values = labels.map(l => productCounts.get(l));
 
 	const trace = {
 		labels: labels,
 		values: values,
-		type: 'pie'
+		type: 'pie',
+		marker: {
+			colors: labels.map(l => colorsPerDeviceTypeOrProduct[l] || '#ccc')
+		},
 	};
 
 	const layout = {
-		title: 'Product Distribution'
+		title: 'Product Distribution',
 	};
 
 	Plotly.newPlot('chart-pie', [trace], layout);
