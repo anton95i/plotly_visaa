@@ -59,7 +59,6 @@ Papa.parse('data/data.csv', {
 		// Set up event listener for the reset button
 		const resetButton = document.getElementById('resetFilters');
 		resetButton.addEventListener('click', () => {
-			console.log('Reset button clicked');
 			const regionSelect = document.getElementById('regionSelect');
 			regionSelect.value = '';
 
@@ -338,14 +337,37 @@ function renderMapChart(data) {
 // ---------------
 // Line chart over time
 function renderLineChart(data) {
+	const filterValues = $("#dateSlider").slider("values");
+	const startDate = addDays(earliestDateObj, filterValues[0]);
+	const endDate = addDays(earliestDateObj, filterValues[1]);
+	const startDateObj = new Date(startDate);
+	const endDateObj = new Date(endDate);
+	const totalSelectedRangeDays = dayDifference(startDateObj, endDateObj);
+
 	// Group data by date
 	const dateCounts = new Map();
-	data.forEach(row => {
-		const dateStr = parseDateDDMMYYYY(row.device_created_day);
-		if (!dateStr) return;
-		const currentVal = dateCounts.get(dateStr) || 0;
-		dateCounts.set(dateStr, currentVal + 1);
-	});
+	if (totalSelectedRangeDays < 365) {
+		data.forEach(row => {
+			const dateStr = parseDateDDMMYYYY(row.device_created_day);
+			if (!dateStr) return;
+
+			const currentVal = dateCounts.get(dateStr) || 0;
+			dateCounts.set(dateStr, currentVal + 1);
+		});
+	} else {
+		data.forEach(row => {
+			const dateStr = parseDateDDMMYYYY(row.device_created_day);
+			if (!dateStr) return;
+			const dateObj = new Date(dateStr);
+	  
+			const firstDayOfWeek = new Date(dateObj);
+			firstDayOfWeek.setDate(dateObj.getDate() - dateObj.getDay() + 1);
+			const key = firstDayOfWeek.toISOString().split('T')[0]; // e.g. "2024-01-15"
+	  
+			const currentVal = dateCounts.get(key) || 0;
+			dateCounts.set(key, currentVal + 1 / 7);
+		  });
+	}
 
 	// Sort by date
 	const sortedKeys = Array.from(dateCounts.keys()).sort((a, b) => new Date(a) - new Date(b));
@@ -356,12 +378,13 @@ function renderLineChart(data) {
 		x: xValues,
 		y: yValues,
 		type: 'scatter',
-		mode: 'lines+markers',
+		// mode: 'lines+markers',
+		mode: 'lines',
 		name: 'Devices Created'
 	};
 
 	const layout = {
-		title: 'Devices Over Time',
+		title: 'Devices Over Time (Avg per Day)',
 		xaxis: { title: 'Date' },
 		yaxis: { title: 'Count' }
 	};
@@ -431,7 +454,6 @@ function renderPieChart(data) {
 	});
 
 	const labels = Array.from(productCounts.keys());
-	console.log('Labels:', labels);
 	const values = labels.map(l => productCounts.get(l));
 
 	const trace = {
@@ -475,3 +497,23 @@ function addDays(baseDate, daysToAdd) {
 	newDate.setDate(newDate.getDate() + daysToAdd);
 	return newDate;
 }
+
+// getWeekNumber(d): returns week number (1-52) for the given date
+function getWeekNumber(d) {
+	// Clone date so we don't mutate the original
+	const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+	// ISO week date weeks start on Monday, so isoWeekday is 1-7
+	const dayNum = date.getUTCDay() || 7; 
+	// Monday is day 1 (and thus 7 Sunday)
+	// If Sunday, shift day back by 7 to handle edge case
+	if (dayNum !== 1) {
+		// Set date to Monday of the current week
+		date.setUTCDate(date.getUTCDate() + (1 - dayNum));
+	}
+	// Start of the first week of the year
+	const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
+	// Calculate week number
+	const weekNum = Math.ceil((((date - yearStart) / 86400000) + 1) / 7);
+	return weekNum;
+}
+  
