@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+	<title>Plotly.js Dashboard - Streamingdata - wi24m037 Steiner Anton</title>
+	<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
+	<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+	<h2>Plotly.js Dashboard - Streamingdata - wi24m037 Steiner Anton</h2>
+
+	<!-- <div class="controls">
+		<select id="stateSelect"><option>(All)</option></select>
+		<select id="categorySelect"><option>(All)</option></select>
+		<input type="range" id="timeSlider" min="0" max="23" step="1" value="0" />
+		<span id="timeLabel">June 2022</span>
+	</div>
+
+	<div class="dashboard-grid">
+		<div id="mapChart" class="chart"></div>     
+		<div id="barChart" class="chart"></div>     
+		<div id="lineChart" class="chart"></div>    
+		<div id="pieChart" class="chart"></div>     
+	</div> -->
+
+	<div id="filters">
+		<label for="regionSelect">Filter by Region:</label>
+		<select id="regionSelect">
+		<option value="">(All)</option>
+		<!-- Options will be populated dynamically -->
+		</select>
+	</div>
+
+	<!-- Chart containers -->
+	<div id="dashboard-container">
+		<div class="chart-wrapper">
+			<div id="chart-map" class="chart"></div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-line" class="chart"></div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-bar" class="chart"></div>
+		</div>
+		<div class="chart-wrapper">
+			<div id="chart-pie" class="chart"></div>
+		</div>
+	</div>
+
+	<div id="chart"></div>
+
+	<script src="js/dashboard.js"></script>
+</body>
+<!-- <body>
+	<h2>Plotly.js Dashboard - Streamingdata - wi24m037 Steiner Anton</h2>
+	<div id="chart" style="width: 700px; height: 500px;"></div>
+
+	<script>
+	// Load the CSV file using PapaParse
+	Papa.parse('data.csv', {
+		download: true,
+		header: true,
+		complete: function(results) {
+		console.log('Parsed CSV:', results.data);
+
+		// Extract data from the CSV rows
+		const rows = results.data;
+
+		// Assume CSV has columns: "X" and "Y"
+		const xValues = rows.map(row => row['X']);
+		const yValues = rows.map(row => row['Y']);
+
+		// Create Plotly chart
+		const trace = {
+			x: xValues,
+			y: yValues,
+			type: 'scatter',
+			mode: 'lines+markers',
+			marker: { color: 'blue' }
+		};
+
+		const layout = {
+			title: 'CSV Data Visualization',
+			xaxis: { title: 'X Axis' },
+			yaxis: { title: 'Y Axis' }
+		};
+
+		Plotly.newPlot('chart', [trace], layout);
+		}
+	});
+	</script>
+</body> -->
+</html>
